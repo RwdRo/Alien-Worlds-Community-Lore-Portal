@@ -1,0 +1,233 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: lore
+    // Fields:
+    //   - title: string (1-200 chars)
+    //   - content: string (1-50000 chars)
+    //   - authorId: string (UID)
+    //   - authorName: string
+    //   - type: string ("canon" | "proposed")
+    //   - status: string ("active" | "in-vote" | "passing" | "rejected")
+    //   - category: string ("Planets" | "Species" | "Factions" | "Technology" | "General" | "History")
+    //   - tags: list of strings
+    //   - entities: list of objects (optional)
+    //   - relationships: list of objects (optional)
+    //   - events: list of objects (optional)
+    //   - createdAt: timestamp
+    //   - voteCount: number
+    //   - requiredNFT: string (optional)
+    //   - sourceUrl: string (optional)
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (UID)
+    //   - displayName: string
+    //   - role: string ("scribe" | "community")
+    //   - bio: string (optional)
+    //   - avatarUrl: string (optional)
+    //   - bookmarks: list of strings (optional)
+    //   - following: list of strings (optional)
+    //   - reputation: number (optional)
+    //   - rank: string (optional)
+    //   - title: string (optional)
+    //   - unlockedThemes: list of strings (optional)
+    //   - waxAccount: string (optional)
+    // Collection: activity
+    // Fields:
+    //   - type: string ("new_lore" | "new_comment" | "lore_accepted" | "new_bounty")
+    //   - userId: string
+    //   - userName: string
+    //   - targetId: string (optional)
+    //   - targetTitle: string (optional)
+    //   - createdAt: timestamp
+    //
+    // Collection: bounties
+    // Fields:
+    //   - title: string
+    //   - description: string
+    //   - reward: string
+    //   - category: string
+    //   - status: string ("open" | "claimed" | "completed")
+    //   - createdAt: timestamp
+    //
+    // Collection: votes
+    // Fields:
+    //   - loreEntryId: string
+    //   - userId: string (UID)
+    //   - voteType: string ("up" | "down")
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // --- Helper Functions ---
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scribe') ||
+         (request.auth.token.email == "rohansandt@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidLore(data) {
+      return hasOnlyAllowedFields(['title', 'content', 'authorId', 'authorName', 'type', 'status', 'category', 'tags', 'entities', 'relationships', 'events', 'createdAt', 'voteCount', 'imageUrl', 'sourceUrl', 'requiredNFT', 'waxAccount']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 50000 &&
+             data.authorId is string &&
+             data.authorName is string &&
+             data.type in ["canon", "proposed"] &&
+             data.status in ["active", "in-vote", "passing", "rejected"] &&
+             data.category in ["Planets", "Species", "Factions", "Technology", "General", "History"] &&
+             data.tags is list &&
+             data.voteCount is number &&
+             data.createdAt is timestamp &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+             (!('sourceUrl' in data) || (data.sourceUrl is string && data.sourceUrl.size() <= 1000)) &&
+             (!('requiredNFT' in data) || (data.requiredNFT is string && data.requiredNFT.size() <= 100)) &&
+             (!('waxAccount' in data) || (data.waxAccount is string || data.waxAccount == null)) &&
+             (!('entities' in data) || data.entities is list) &&
+             (!('relationships' in data) || data.relationships is list) &&
+             (!('events' in data) || data.events is list);
+    }
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'role', 'bio', 'avatarUrl', 'bookmarks', 'following', 'reputation', 'rank', 'title', 'unlockedThemes', 'waxAccount']) &&
+             data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 50 &&
+             data.role in ["scribe", "skribus", "skiv", "reader"] &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000)) &&
+             (!('bookmarks' in data) || (data.bookmarks is list && data.bookmarks.size() <= 100)) &&
+             (!('following' in data) || (data.following is list && data.following.size() <= 500)) &&
+             (!('reputation' in data) || data.reputation is number) &&
+             (!('rank' in data) || (data.rank is string && data.rank.size() <= 50)) &&
+             (!('title' in data) || (data.title is string && data.title.size() <= 100)) &&
+             (!('unlockedThemes' in data) || (data.unlockedThemes is list && data.unlockedThemes.size() <= 50)) &&
+             (!('waxAccount' in data) || (data.waxAccount is string && data.waxAccount.size() <= 13));
+    }
+
+    function isValidVote(data) {
+      return hasOnlyAllowedFields(['loreEntryId', 'userId', 'voteType', 'createdAt']) &&
+             data.loreEntryId is string &&
+             data.userId == request.auth.uid &&
+             data.voteType in ["up", "down"] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidActivity(data) {
+      return hasOnlyAllowedFields(['type', 'userId', 'userName', 'waxAccount', 'targetId', 'targetTitle', 'createdAt']) &&
+             data.type in ["new_lore", "new_comment", "lore_accepted", "new_bounty", "follow", "bounty_claimed"] &&
+             data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.createdAt is timestamp &&
+             (!('waxAccount' in data) || (data.waxAccount is string || data.waxAccount == null)) &&
+             (!('targetId' in data) || data.targetId is string) &&
+             (!('targetTitle' in data) || data.targetTitle is string);
+    }
+
+    function isValidComment(data) {
+      return hasOnlyAllowedFields(['id', 'loreEntryId', 'userId', 'userName', 'text', 'createdAt', 'status']) &&
+             data.loreEntryId is string &&
+             data.userId == request.auth.uid &&
+             data.userName is string &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.createdAt is timestamp &&
+             data.status in ["pending", "approved", "rejected"];
+    }
+
+    function isValidBounty(data) {
+      return hasOnlyAllowedFields(['title', 'description', 'reward', 'category', 'status', 'createdAt', 'authorId']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.reward is string && data.reward.size() <= 100 &&
+             data.category is string &&
+             data.status in ["open", "claimed", "completed"] &&
+             data.createdAt is timestamp &&
+             data.authorId is string;
+    }
+
+    // --- Rules ---
+
+    match /lore/{loreId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                      isValidLore(request.resource.data) && 
+                      (isAdmin() || (request.resource.data.authorId == request.auth.uid && request.resource.data.type == "proposed"));
+      allow update: if isAdmin() || 
+                      (isOwner(resource.data.authorId) && 
+                       resource.data.type == "proposed" && 
+                       request.resource.data.type == "proposed" && 
+                       isValidLore(request.resource.data)) ||
+                      (isAuthenticated() && 
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voteCount']) &&
+                       math.abs(request.resource.data.voteCount - resource.data.voteCount) <= 2 &&
+                       exists(/databases/$(database)/documents/votes/$(request.auth.uid + '_' + loreId)));
+      allow delete: if isAdmin();
+    }
+
+    match /comments/{commentId} {
+      allow read: if resource.data.status == 'approved' || isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidComment(request.resource.data) && request.resource.data.status == 'pending';
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidComment(request.resource.data) && request.resource.data.status == resource.data.status);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /votes/{voteId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated() && 
+                               isValidVote(request.resource.data) && 
+                               request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                      isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      (request.resource.data.role == "reader" || isAdmin());
+      allow update: if isAdmin() || 
+                      (isOwner(userId) && 
+                       isValidUser(request.resource.data) && 
+                       (
+                         (request.resource.data.role == resource.data.role &&
+                          request.resource.data.reputation == resource.data.reputation &&
+                          request.resource.data.rank == resource.data.rank) ||
+                         (request.resource.data.role == 'scribe' && 
+                          resource.data.role == 'reader' && 
+                          request.resource.data.waxAccount != null)
+                       ));
+    }
+
+    match /activity/{activityId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidActivity(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /bounties/{bountyId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidBounty(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && isValidBounty(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) && request.resource.data.status == 'claimed');
+      allow delete: if isAdmin();
+    }
+  }
+}

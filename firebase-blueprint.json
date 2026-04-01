@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "LoreEntry": {
+      "title": "LoreEntry",
+      "description": "A single piece of lore, either canon or proposed.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the lore entry." },
+        "content": { "type": "string", "description": "The markdown content of the lore entry." },
+        "authorId": { "type": "string", "description": "The UID of the author." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "type": { "type": "string", "enum": ["canon", "proposed"], "description": "The type of lore." },
+        "status": { "type": "string", "enum": ["active", "in-vote", "passing", "rejected"], "description": "The current status of the proposal." },
+        "category": { "type": "string", "enum": ["Planets", "Species", "Factions", "Technology", "General", "History"], "description": "The category of the lore." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Tags associated with the entry." },
+        "entities": { "type": "array", "items": { "type": "object" }, "description": "Extracted entities (name, type, category)." },
+        "relationships": { "type": "array", "items": { "type": "object" }, "description": "Extracted relationships (subject, predicate, object)." },
+        "events": { "type": "array", "items": { "type": "object" }, "description": "Extracted historical events (name, description)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the entry was created." },
+        "voteCount": { "type": "number", "description": "Net votes for proposed lore." },
+        "requiredNFT": { "type": "string", "description": "Optional WAX NFT template ID required to view this lore." },
+        "sourceUrl": { "type": "string", "description": "Optional link to the original source." },
+        "imageUrl": { "type": "string", "description": "Optional image URL for the lore entry." }
+      },
+      "required": ["title", "content", "authorId", "type", "status", "category", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a lore entry.",
+      "type": "object",
+      "properties": {
+        "loreEntryId": { "type": "string", "description": "The ID of the lore entry." },
+        "userId": { "type": "string", "description": "The UID of the commenter." },
+        "userName": { "type": "string", "description": "The display name of the commenter." },
+        "text": { "type": "string", "description": "The comment text." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the comment was posted." }
+      },
+      "required": ["loreEntryId", "userId", "userName", "text", "createdAt"]
+    },
+    "Vote": {
+      "title": "Vote",
+      "description": "A vote on a proposed lore entry.",
+      "type": "object",
+      "properties": {
+        "loreEntryId": { "type": "string", "description": "The ID of the lore entry." },
+        "userId": { "type": "string", "description": "The UID of the voter." },
+        "voteType": { "type": "string", "enum": ["up", "down"], "description": "The type of vote." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the vote was cast." }
+      },
+      "required": ["loreEntryId", "userId", "voteType", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "bio": { "type": "string", "description": "A short bio." },
+        "role": { "type": "string", "enum": ["scribe", "skribus", "skiv", "reader"], "description": "The user's role." },
+        "avatarUrl": { "type": "string", "description": "URL to the user's avatar." },
+        "bookmarks": { "type": "array", "items": { "type": "string" }, "description": "List of bookmarked lore IDs." },
+        "following": { "type": "array", "items": { "type": "string" }, "description": "List of followed user UIDs." },
+        "reputation": { "type": "number", "description": "User's reputation points." },
+        "rank": { "type": "string", "description": "User's scribe rank title." },
+        "title": { "type": "string", "description": "User's earned honorary title." },
+        "unlockedThemes": { "type": "array", "items": { "type": "string" }, "description": "List of unlocked terminal themes." },
+        "waxAccount": { "type": "string", "description": "The user's WAX wallet account name." }
+      },
+      "required": ["displayName", "role"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "A log of global activities.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["new_lore", "new_comment", "lore_accepted", "new_bounty", "follow", "bounty_claimed"], "description": "The type of activity." },
+        "userId": { "type": "string", "description": "The UID of the user who performed the action." },
+        "userName": { "type": "string", "description": "The display name of the user." },
+        "targetId": { "type": "string", "description": "The ID of the target resource (lore, bounty, etc.)." },
+        "targetTitle": { "type": "string", "description": "The title of the target resource." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the activity occurred." }
+      },
+      "required": ["type", "userId", "userName", "createdAt"]
+    },
+    "Bounty": {
+      "title": "Bounty",
+      "description": "A lore bounty posted by the Federation.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the bounty." },
+        "description": { "type": "string", "description": "The details of what lore is needed." },
+        "reward": { "type": "string", "description": "The reward for completing the bounty." },
+        "category": { "type": "string", "description": "The category the lore should belong to." },
+        "status": { "type": "string", "enum": ["open", "claimed", "completed"], "description": "The current status of the bounty." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the bounty was posted." }
+      },
+      "required": ["title", "description", "reward", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/lore": { "schema": "LoreEntry", "description": "Collection of all lore entries." },
+    "/comments": { "schema": "Comment", "description": "Collection of comments." },
+    "/votes": { "schema": "Vote", "description": "Collection of votes." },
+    "/users": { "schema": "UserProfile", "description": "Collection of user profiles." },
+    "/activity": { "schema": "ActivityLog", "description": "Collection of global activities." },
+    "/bounties": { "schema": "Bounty", "description": "Collection of lore bounties." }
+  }
+}
